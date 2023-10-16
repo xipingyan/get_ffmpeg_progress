@@ -1,6 +1,6 @@
-#include <stdio.hpp>
 #include <string>
 #include <mutex>
+#include <stdio.h>
 
 #ifdef WIN32
 #include <Windows.h>
@@ -9,21 +9,17 @@
 
 class CMyProgress {
 public:
-	void set_duration(float val) {
+	void set_dur(int val) {
 		std::lock_guard<std::mutex> lk(_mutex);
 		_duration = val;
 	}
-	float get_duration() {
+	int get_dur() {
 		std::lock_guard<std::mutex> lk(_mutex);
 		return _duration;
 	}
-	void set_progress(float val) {
+	void set_tm(int val) {
 		std::lock_guard<std::mutex> lk(_mutex);
-		_p = val;
-	}
-	float get_progress() {
-		std::lock_guard<std::mutex> lk(_mutex);
-		return _p;
+		_tm = val;
 	}
     void set_finish() {
 		std::lock_guard<std::mutex> lk(_mutex);
@@ -33,10 +29,15 @@ public:
 		std::lock_guard<std::mutex> lk(_mutex);
 		return _bfinish;
 	}
+
+	float get_progress() {
+		std::lock_guard<std::mutex> lk(_mutex);
+		return _duration > 0 ? static_cast<float>(_tm) / static_cast<float>(_duration) : -1.f;
+	}
 private:
 	std::mutex _mutex;
-	float _p = 0;
-    float _duration = 0;
+	int _tm = 0;
+    int _duration = 0;
     bool _bfinish = false;
 };
 
@@ -45,23 +46,23 @@ static CMyProgress g_myprogess;
 // Format = hh:mm::ss.
 bool parse_time(char* pBuffer, int& h, int& m, int& s) {
     // Hour
-    auto hour = std::string(pBuffer).find_first_of(":", found + 1);
+    auto hour = std::string(pBuffer).find_first_of(":", 0);
     if (hour != std::string::npos) {
         std::string sh, sm, ss;
-        sh = std::string(pBuffer).substr(found + 1, hour - found - 1);
+        sh = std::string(pBuffer).substr(1, hour - 1);
         // Minute
         auto minute = std::string(pBuffer).find_first_of(":", hour + 1);
         if (minute != std::string::npos) {
             sm = std::string(pBuffer).substr(hour + 1, minute - hour - 1);
             // Second.
-            auto s = std::string(pBuffer).find_first_of(".", minute + 1);
-            if (s != std::string::npos) {
-                ss = std::string(pBuffer).substr(minute + 1, s - minute - 1);
+            auto second = std::string(pBuffer).find_first_of(".", minute + 1);
+            if (second != std::string::npos) {
+                ss = std::string(pBuffer).substr(minute + 1, second - minute - 1);
                 //printf("sh=%s\n", sh.c_str());
                 //printf("sm=%s\n", sm.c_str());
                 //printf("ss=%s\n", ss.c_str());
-                h = std::stoi(sh)
-                m = std::stoi(sm)
+				h = std::stoi(sh);
+				m = std::stoi(sm);
                 s = std::stoi(ss);
                 return true;
             }
@@ -83,6 +84,15 @@ int get_cur_tm(char* pBuffer) {
 	}
 	return 0;
 }
+
+void unit_test_for_parse_time() {
+	char ptext[] = "=   29696kB time=00:00:30.88 bitrate=7875.6kbits/s speed=0.687x";
+	auto x = get_cur_tm(ptext);
+	if (x != 30) {
+		printf("get_cur_tm parse fail, [%d!=30]\n", x);
+	}
+}
+
 // Format="xxxxxDuration: hh:mm:ss.*****"
 int get_duration(char* pBuffer) {
 	auto found = std::string(pBuffer).find("Duration:");
@@ -138,19 +148,19 @@ int CreateProcess_WIN()
 			{
 				DWORD rSize = 0;
 				BOOL bRun = 0;
-				bRun = ReadFile(hReadPipe, pBuffer, 256, &rSize, NULL);
+				bRun = ReadFile(hReadPipe, pBuffer, 255, &rSize, NULL);
 				pBuffer[rSize] = '\0';
 
-                if (g_myprogess.get_duration() == 0) {
+                if (g_myprogess.get_dur() == 0) {
                     auto dur = get_duration(pBuffer);
 					if (dur > 0) {
-						g_myprogess.set_duration(dur);
+						g_myprogess.set_dur(dur);
 					}
                 }
 				if (rSize > 20) {
 					auto tm = get_cur_tm(pBuffer);
 					if (tm > 0) {
-						g_myprogess.set_progress(tm);
+						g_myprogess.set_tm(tm);
 					}
 				}
 			}
@@ -168,7 +178,7 @@ int CreateProcess_WIN()
 		CloseHandle(pi.hThread);
 		return 0;
 	}
-	printf("Failure\n");
+	printf("Failure: please check if exist 'ffmpeg.exe'\n");
 	return -1;
 }
 
@@ -177,17 +187,17 @@ int main()
 	std::thread thrd = std::thread([]() { CreateProcess_WIN(); });
 	thrd.detach();
 	for (;;) {
-		static float g_progress = 0;
+		static float g_p = 0;
 		float cur_p = g_myprogess.get_progress();
-		if (cur_p != g_progress) {
-			g_progress = cur_p;
+		if ((cur_p != g_p) && cur_p >= 0) {
+			g_p = cur_p;
 			printf("Convert progress: %.2f\n", cur_p);
 		}
 
         if(g_myprogess.get_finish()) {
             break;
         }
-		std::this_thread::sleep_for(std::chrono::milliseconds(500));
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	}
     printf("Finish main.\n");
 	return 0;
