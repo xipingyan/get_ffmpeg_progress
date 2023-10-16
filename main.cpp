@@ -149,10 +149,15 @@ int CreateProcess_WIN()
 				DWORD rSize = 0;
 				BOOL bRun = 0;
 				bRun = ReadFile(hReadPipe, pBuffer, 255, &rSize, NULL);
+				if (!bRun) {
+					printf("ReadFile return false.\n");
+					continue;
+				}
 				pBuffer[rSize] = '\0';
 
+				static int dur = -1;
                 if (g_myprogess.get_dur() == 0) {
-                    auto dur = get_duration(pBuffer);
+					dur = get_duration(pBuffer);
 					if (dur > 0) {
 						g_myprogess.set_dur(dur);
 					}
@@ -161,17 +166,23 @@ int CreateProcess_WIN()
 					auto tm = get_cur_tm(pBuffer);
 					if (tm > 0) {
 						g_myprogess.set_tm(tm);
+						if (tm >= dur) {
+							printf("FFMpeg progress show finish.\n");
+							//g_myprogess.set_finish();
+							break;
+						}
 					}
 				}
 			}
 			else
 			{
-				printf("FFMpeg Done\n");
+				printf("FFMpeg Done.\n");
                 g_myprogess.set_finish();
 				break;
 			}
 		}
 
+		printf("WaitForSingleObject...\n");
 		WaitForSingleObject(pi.hProcess, INFINITE);
 		printf("Finish CreateProcess_WIN\n");
 		CloseHandle(pi.hProcess);
@@ -191,7 +202,7 @@ int main()
 		float cur_p = g_myprogess.get_progress();
 		if ((cur_p != g_p) && cur_p >= 0) {
 			g_p = cur_p;
-			printf("Convert progress: %.2f\n", cur_p);
+			printf("Convert progress: %.2f%%\n", cur_p * 100.f);
 		}
 
         if(g_myprogess.get_finish()) {
