@@ -33,7 +33,7 @@ public:
 
 	float get_progress() {
 		std::lock_guard<std::mutex> lk(_mutex);
-		return _duration > 0 ? static_cast<float>(_tm) / static_cast<float>(_duration) : -1.f;
+		return _duration > 0 ? static_cast<float>(_tm) / static_cast<float>(_duration) : 0.f;
 	}
 
 	bool have_error() {
@@ -161,7 +161,7 @@ int CreateProcess_WIN(const std::string& src_fn, const std::string& dst_fn,
 					continue;
 				}
 				pBuffer[rSize] = '\0';
-				printf("----->pBuffer=%s\n", pBuffer);
+				//printf("----->pBuffer=%s\n", pBuffer);
 
 				static int dur = -1;
                 if (myprogess->get_dur() == 0) {
@@ -196,6 +196,7 @@ int CreateProcess_WIN(const std::string& src_fn, const std::string& dst_fn,
 
 		printf("WaitForSingleObject...\n");
 		WaitForSingleObject(pi.hProcess, INFINITE);
+		myprogess->set_finish();
 		printf("Finish CreateProcess_WIN\n");
 		CloseHandle(pi.hProcess);
 		CloseHandle(pi.hThread);
